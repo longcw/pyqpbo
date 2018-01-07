@@ -9,6 +9,7 @@
 import numpy as np
 cimport numpy as np
 from libcpp cimport bool
+from libc.stdlib cimport malloc, free
 from time import time
 
 np.import_array()
@@ -33,6 +34,58 @@ cdef extern from "QPBO.h":
         void Solve()
         void ComputeWeakPersistencies()
         bool Improve()
+        void MergeParallelEdges()
+        void SetLabel(NodeId i, int label)
+
+
+def QPBO_wrapper(np.ndarray[float, ndim=2, mode='c'] u_term,
+                  np.ndarray[float, ndim=2, mode='c'] p_term,
+                  np.ndarray[np.int32_t, ndim=1, mode='c'] ig):
+    cdef int N = u_term.shape[0]
+    cdef int E = p_term.shape[0]
+    cdef int enE = E
+
+    cdef float* pU = <float*> u_term.data
+    cdef float* pP = <float*> p_term.data
+    # cdef np.ndarray[np.int32_t, ndim=2] result = np.zeros(N, dtype=np.int32_t)
+    cdef np.npy_intp result_shape[1]
+    result_shape[0] = N
+    cdef np.ndarray[np.int32_t, ndim=1] result = np.PyArray_SimpleNew(1, result_shape, np.NPY_INT32)
+
+    cdef QPBO[float] * q = new QPBO[float](N, enE)
+    q.AddNode(N)
+
+    # add unary terms
+    for ii in range(N):
+        if pU[2 * ii] == 0 and pU[2 * ii + 1] == 0:
+            continue    # ignore dummy potentials
+        q.AddUnaryTerm(ii, pU[2 * ii], pU[2 * ii + 1])
+
+    # add pairwise terms
+    # cdef EdgeId * pEdges = <EdgeId *>malloc(E * sizeof(EdgeId))
+    for ii in range(E):
+        q.AddPairwiseTerm(<NodeId>pP[6 * ii], <NodeId>pP[6 * ii + 1],
+                          pP[6 * ii + 2], pP[6 * ii + 3], pP[6 * ii + 4], pP[6 * ii + 5])
+
+    # in case where duplicate edges where insderted
+    q.MergeParallelEdges()
+
+    # improved method
+    cdef np.int32_t* piG = <np.int32_t *> ig.data
+    for ni in range(N):
+        q.SetLabel(ni, piG[ni])
+    rnd_state = np.random.mtrand.RandomState()
+    srand(time())
+    q.Improve()
+
+    # get the labels
+    cdef np.int32_t * result_ptr = <np.int32_t*>result.data
+    for ii in range(N):
+        result_ptr[ii] = q.GetLabel(ii)
+
+    del q
+    # free(pEdges)
+    return result
 
 
 def binary_graph(np.ndarray[np.int32_t, ndim=2, mode='c'] edges,
