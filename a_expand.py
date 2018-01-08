@@ -1,4 +1,6 @@
 import numpy as np
+from sklearn.utils.linear_assignment_ import linear_assignment
+
 from .pyqpbo import QPBO_wrapper
 
 
@@ -58,6 +60,8 @@ def cc_energy(affinity_matrix, labels):
 
 def a_expand(affinity_matrix):
     n = affinity_matrix.shape[0]
+    if n == 0:
+        return []
     affinity_matrix -= np.diag(np.diag(affinity_matrix))
 
     labels = np.ones(n, dtype=np.int32)
@@ -84,6 +88,25 @@ def a_expand(affinity_matrix):
         if not accepted:
             break
     return labels
+
+
+def influence_map(cost_matrix):
+    if cost_matrix.size == 0:
+        return np.ones(cost_matrix.shape[0] + cost_matrix.shape[1], dtype=np.int)
+    cost_matrix = cost_matrix / 100000.
+    matches = linear_assignment(cost_matrix)
+    match_inds = list(zip(*matches))
+    max_cost = np.max(cost_matrix[match_inds])
+    soft_cost = 0.01
+
+    affinity = -cost_matrix + max_cost + soft_cost
+    affinity[match_inds] = 1
+    sc_costMatrix = np.vstack([np.hstack([0 * np.eye(affinity.shape[0]), affinity]),
+                               np.hstack([affinity.transpose(), 0 * np.eye(affinity.shape[1])])])
+
+    labels = a_expand(sc_costMatrix)
+    return labels
+
 
 if __name__ == '__main__':
     def test():
