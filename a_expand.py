@@ -93,14 +93,15 @@ def a_expand(affinity_matrix):
 def influence_map(cost_matrix):
     if cost_matrix.size == 0:
         return np.ones(cost_matrix.shape[0] + cost_matrix.shape[1], dtype=np.int)
-    cost_matrix = cost_matrix / 100000.
+    cost_matrix = cost_matrix / 1000. / 50.
     matches = linear_assignment(cost_matrix)
     match_inds = list(zip(*matches))
     max_cost = np.max(cost_matrix[match_inds])
-    soft_cost = 0.01
+    soft_cost = 0.05
 
     affinity = -cost_matrix + max_cost + soft_cost
-    affinity[match_inds] = 1
+    affinity[match_inds] = 0.2
+    print(affinity)
     sc_costMatrix = np.vstack([np.hstack([0 * np.eye(affinity.shape[0]), affinity]),
                                np.hstack([affinity.transpose(), 0 * np.eye(affinity.shape[1])])])
 
